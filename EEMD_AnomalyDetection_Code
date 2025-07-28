@@ -1,0 +1,117 @@
+/* -- Ref to cite: A comparative study for the source depth estimation of very low frequency electromagnetic (VLF-EM) signals
+A Ebrahimi, N Sundararajan, VR Babu - Journal of Applied Geophysics, 2019 */
+
+# eemd_anomaly_detection.py
+
+"""
+VLF-EM Signal Anomaly Detection using EEMD
+Author: Ala Ebrahimi
+Date: 28/07/2019
+
+This script:
+1. Simulates a 1D VLF-EM geophysical signal with geological background, noise, and a deposit anomaly.
+2. Applies Ensemble Empirical Mode Decomposition (EEMD) to extract IMFs.
+3. Reconstructs the signal without high-frequency noise.
+4. Detects anomalies (outliers) in the residual signal.
+"""
+
+# === Import Libraries ===
+import numpy as np
+import matplotlib.pyplot as plt
+from PyEMD import EEMD
+
+# === Step 1: Simulate VLF-EM Signal ===
+
+# Create a spatial range for the simulated survey line (in meters)
+x = np.linspace(0, 100, 1000)
+
+# Geological background signal: smooth sine wave
+baseline = np.sin(x / 10) * 5
+
+# Random Gaussian noise
+np.random.seed(0)
+noise = np.random.normal(0, 0.5, len(x))
+
+# Anomaly: Gaussian spike representing a mineral deposit around x=50m
+anomaly = np.exp(-((x - 50)**2) / (2 * 1.5**2)) * 10
+
+# Final VLF-EM signal
+signal = baseline + noise + anomaly
+
+# Plot the raw signal
+plt.figure(figsize=(10, 4))
+plt.plot(x, signal, label="Raw VLF-EM Signal")
+plt.title("Simulated VLF-EM Signal with Anomaly")
+plt.xlabel("Distance (m)")
+plt.ylabel("EM Response")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# === Step 2: Apply EEMD Decomposition ===
+
+# Create EEMD instance
+eemd = EEMD()
+eemd.trials = 100      # number of ensemble trials (more = better separation)
+eemd.noise_width = 0.2  # amplitude of added white noise
+
+# Decompose signal into Intrinsic Mode Functions (IMFs)
+IMFs = eemd.eemd(signal, x)
+
+# Plot each IMF
+for i, imf in enumerate(IMFs):
+    plt.figure(figsize=(10, 2))
+    plt.plot(x, imf)
+    plt.title(f"IMF {i + 1}")
+    plt.xlabel("Distance (m)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+# === Step 3: Reconstruct Signal Without High-Frequency Noise ===
+
+# Skip the first IMF (assumed to be high-frequency noise)
+reconstructed = np.sum(IMFs[1:], axis=0)
+
+# Plot reconstructed (denoised) vs original
+plt.figure(figsize=(10, 4))
+plt.plot(x, signal, label="Original Signal", alpha=0.5)
+plt.plot(x, reconstructed, label="Reconstructed Signal (No Noise)", linewidth=2)
+plt.title("Signal Denoising via EEMD")
+plt.xlabel("Distance (m)")
+plt.ylabel("EM Response")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# === Step 4: Residual & Anomaly Detection ===
+
+# Residual = signal - denoised version
+residual = signal - reconstructed
+
+# Threshold: 2 standard deviations
+threshold = 2 * np.std(residual)
+
+# Detect indices where anomaly (outlier) occurs
+anomaly_indices = np.where(np.abs(residual) > threshold)[0]
+anomaly_locations = x[anomaly_indices]
+
+# Plot residual and detected anomalies
+plt.figure(figsize=(10, 4))
+plt.plot(x, residual, label="Residual (Potential Anomalies)", color='darkorange')
+plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
+plt.axhline(y=-threshold, color='r', linestyle='--')
+plt.scatter(anomaly_locations, residual[anomaly_indices], color='red', label='Anomalies')
+plt.title("Residual Analysis and Anomaly Detection")
+plt.xlabel("Distance (m)")
+plt.ylabel("Residual")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Print anomaly locations
+print("🚨 Detected anomaly locations (in meters):")
+print(np.round(anomaly_locations, 2))
